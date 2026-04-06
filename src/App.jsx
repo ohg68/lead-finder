@@ -73,7 +73,7 @@ async function scrapeEscapadaRural(loc) {
   const slug = loc.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g,"-");
   try {
     const html = await proxyFetch(`https://www.escapadarural.com/casas-rurales/${slug}`);
-    if (!html) return [];
+    if(!html) return [];
     const ms = [...html.matchAll(/<h2[^>]*>\s*(?:<a[^>]*href="(\/casa-rural\/[^"]+)"[^>]*>)?(.*?)(?:<\/a>)?<\/h2>/gi)];
     const ps = [...html.matchAll(/(\d+)\u20ac/g)];
     return ms.slice(0,12).map((m,i) => ({
@@ -88,7 +88,7 @@ async function scrapeBooking(loc) {
   const slug = loc.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g,"-");
   try {
     const html = await proxyFetch(`https://www.booking.com/country-houses/city/es/${slug}.html`);
-    if (!html) return [];
+    if(!html) return [];
     const links = [...new Set([...html.matchAll(/href="(\/hotel\/es\/[^"?]+)/gi)].map(m=>m[1]))];
     return links.slice(0,12).map((l,i) => ({
       id:`bk_${i}_${Date.now()}`, name:l.split("/").pop().replace(/-/g," ").replace(/\.html$/,"").replace(/^\w/,c=>c.toUpperCase()),
@@ -102,7 +102,7 @@ async function scrapeCasasRurales(loc) {
   const slug = loc.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g,"-");
   try {
     const html = await proxyFetch(`https://www.casasrurales.net/casas-rurales/${slug}`);
-    if (!html) return [];
+    if(!html) return [];
     const ms = [...html.matchAll(/href="(\/alojamiento\/[^"]+)"[^>]*>([^<]+)/gi)];
     return ms.slice(0,10).map((m,i) => ({
       id:`cr_${i}_${Date.now()}`, name:m[2].trim(), address:loc,
@@ -173,29 +173,25 @@ export default function App() {
 
   async function multiSearch(){
     if(demo){setLoading(true);await new Promise(r=>setTimeout(r,500));setLeads(DEMO_LEADS);setLoading(false);return;}
-    setLoading(true);setLeads([]);let all=[];const l=loc||"málaga";
-    try{
-      if(sources.includes("google")&&gKey){setLoadMsg("Google Maps...");all.push(...await searchGoogle(query||"hoteles",l,gKey));}
-      if(sources.includes("escapadarural")){setLoadMsg("EscapadaRural...");all.push(...await scrapeEscapadaRural(l));}
-      if(sources.includes("booking")){setLoadMsg("Booking...");all.push(...await scrapeBooking(l));}
-      if(sources.includes("casasrurales")){setLoadMsg("CasasRurales...");all.push(...await scrapeCasasRurales(l));}
-    }catch(e){console.log("Search error:",e);}
-    const seen=new Set();const deduped=all.filter(l=>{const k=l.name?.toLowerCase().replace(/[^a-z0-9]/g,"").slice(0,18);if(!k||seen.has(k))return false;seen.add(k);return true;});
-    setLeads(deduped);setLoading(false);setLoadMsg("");showToast(deduped.length>0?`${deduped.length} resultados`:"Sin resultados - prueba otra ciudad");
+    setLoading(true);setLeads([]);let all=[];const l=loc||"m\u00e1laga";
+    if(sources.includes("google")&&gKey){setLoadMsg("Google Maps...");all.push(...await searchGoogle(query||"hoteles",l,gKey));}
+    if(sources.includes("escapadarural")){setLoadMsg("EscapadaRural...");all.push(...await scrapeEscapadaRural(l));}
+    if(sources.includes("booking")){setLoadMsg("Booking...");all.push(...await scrapeBooking(l));}
+    if(sources.includes("casasrurales")){setLoadMsg("CasasRurales...");all.push(...await scrapeCasasRurales(l));}
+    const seen=new Set();const deduped=all.filter(l=>{const k=l.name.toLowerCase().replace(/[^a-z0-9]/g,"").slice(0,18);if(seen.has(k))return false;seen.add(k);return true;});
+    setLeads(deduped);setLoading(false);setLoadMsg("");showToast(`${deduped.length} resultados`);
   }
 
   async function routeSearch(){
     setLoading(true);setLeads([]);setView("search");
     const wp=[rOrigin,...rStops.filter(Boolean),rDest].filter(Boolean);const all=[];
-    try{
-      for(const city of wp){
-        setLoadMsg(`📍 ${city}...`);
-        if(sources.includes("google")&&gKey)all.push(...(await searchGoogle(rQuery,city,gKey)).map(l=>({...l,routeCity:city})));
-        if(sources.includes("escapadarural"))all.push(...(await scrapeEscapadaRural(city)).map(l=>({...l,routeCity:city})));
-        if(sources.includes("booking"))all.push(...(await scrapeBooking(city)).map(l=>({...l,routeCity:city})));
-        await new Promise(r=>setTimeout(r,300));
-      }
-    }catch(e){console.log("Route error:",e);}
+    for(const city of wp){
+      setLoadMsg(`\u{1F4CD} ${city}...`);
+      if(sources.includes("google")&&gKey)all.push(...(await searchGoogle(rQuery,city,gKey)).map(l=>({...l,routeCity:city})));
+      if(sources.includes("escapadarural"))all.push(...(await scrapeEscapadaRural(city)).map(l=>({...l,routeCity:city})));
+      if(sources.includes("booking"))all.push(...(await scrapeBooking(city)).map(l=>({...l,routeCity:city})));
+      await new Promise(r=>setTimeout(r,300));
+    }
     setLeads(all);setLoading(false);setLoadMsg("");showToast(`${all.length} alojamientos en ${wp.length} paradas`);
   }
 
