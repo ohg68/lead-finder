@@ -197,21 +197,27 @@ export default function App() {
 
   const SCRAPLING_API = "https://scrapling-vercel.vercel.app";
   async function enrichLead(lead){
-    if(!lead.website){showToast("Sin web");return;}setEnrId(lead.id);
+    if(!lead.name){showToast("Sin datos");return;}setEnrId(lead.id);
     try{
-      let emails=[],socials={},phones=[];
+      let emails=[],socials={},phones=[],snippets=[],sources=[];
       try{
-        const r=await fetch(`${SCRAPLING_API}/enrich`,{
+        const r=await fetch(`${SCRAPLING_API}/research`,{
           method:"POST",headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({url:lead.website}),signal:AbortSignal.timeout(20000)
+          body:JSON.stringify({
+            company:lead.name,
+            url:lead.website||undefined,
+            location:lead.address||undefined
+          }),signal:AbortSignal.timeout(30000)
         });
-        if(r.ok){const d=await r.json();emails=d.emails||[];socials=d.socials||{};phones=d.phones||[];}
+        if(r.ok){const d=await r.json();emails=d.emails||[];socials=d.socials||{};phones=d.phones||[];snippets=d.snippets||[];sources=d.sources||[];}
       }catch{
-        const html=await proxyFetch(lead.website);
-        const ex=extractContacts(html||"");emails=ex.emails;socials=ex.socials;phones=ex.phones;
-        try{const base=new URL(lead.website);for(const p of["/contact","/contacto","/about"]){try{const ch=await proxyFetch(base.origin+p,6000);if(ch){const e2=extractContacts(ch);emails=[...new Set([...emails,...e2.emails])];Object.assign(socials,e2.socials);phones=[...new Set([...phones,...e2.phones])];}}catch{}}}catch{}
+        // Fallback: browser-side scraping if website available
+        if(lead.website){
+          const html=await proxyFetch(lead.website);
+          const ex=extractContacts(html||"");emails=ex.emails;socials=ex.socials;phones=ex.phones;
+        }
       }
-      const en={emails:emails.slice(0,8),socials,phones:phones.slice(0,3),status:"done"};
+      const en={emails:emails.slice(0,8),socials,phones:phones.slice(0,4),snippets,sources,status:"done"};
       setLeads(p=>p.map(l=>l.id===lead.id?{...l,enrichment:en,phone:phones[0]||l.phone}:l));
       if(sel?.id===lead.id)setSel(p=>({...p,enrichment:en,phone:phones[0]||p.phone}));
       showToast(`${emails.length} emails · ${Object.keys(socials).length} redes · ${phones.length} tel`);
@@ -362,9 +368,11 @@ export default function App() {
             {sel.enrichment?.status==="done"&&(<div style={{marginTop:8,padding:8,background:"#0a0e17",borderRadius:7}}>
               {sel.enrichment.emails?.length>0&&<div style={{marginBottom:4}}><span style={{fontSize:10,color:"#64748b",fontWeight:600}}>EMAILS: </span>{sel.enrichment.emails.map((em,i)=><a key={i} href={`mailto:${em}`} style={{fontSize:11,color:"#4ade80",marginRight:6,textDecoration:"none"}}>{em}</a>)}</div>}
               {sel.enrichment.phones?.length>0&&<div style={{marginBottom:4}}><span style={{fontSize:10,color:"#64748b",fontWeight:600}}>TELS: </span>{sel.enrichment.phones.map((p,i)=><span key={i} style={{fontSize:11,color:"#94a3b8",marginRight:6}}>{p}</span>)}</div>}
-              {Object.keys(sel.enrichment.socials||{}).length>0&&<div><span style={{fontSize:10,color:"#64748b",fontWeight:600}}>REDES: </span>{Object.entries(sel.enrichment.socials).map(([k,v])=><a key={k} href={socialUrl[k]?.(v)} target="_blank" rel="noopener" style={{fontSize:11,color:"#c084fc",marginRight:8,textDecoration:"none"}}>{socialIcon[k]} {v}</a>)}</div>}
+              {Object.keys(sel.enrichment.socials||{}).length>0&&<div style={{marginBottom:4}}><span style={{fontSize:10,color:"#64748b",fontWeight:600}}>REDES: </span>{Object.entries(sel.enrichment.socials).map(([k,v])=><a key={k} href={socialUrl[k]?.(v)} target="_blank" rel="noopener" style={{fontSize:11,color:"#c084fc",marginRight:8,textDecoration:"none"}}>{socialIcon[k]} {v}</a>)}</div>}
+              {sel.enrichment.snippets?.length>0&&<div style={{marginTop:6,borderTop:"1px solid #1e293b",paddingTop:6}}><span style={{fontSize:10,color:"#64748b",fontWeight:600,display:"block",marginBottom:4}}>INTEL: </span>{sel.enrichment.snippets.slice(0,3).map((s,i)=><div key={i} style={{fontSize:10,color:"#64748b",marginBottom:3,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={s}>· {s.replace(/<[^>]+>/g,"").replace(/\s+/g," ").trim().slice(0,120)}</div>)}</div>}
+              {sel.enrichment.sources?.length>0&&<div style={{marginTop:4}}>{sel.enrichment.sources.map(s=><span key={s} style={{fontSize:9,background:"#1e293b",color:"#475569",padding:"1px 5px",borderRadius:4,marginRight:3}}>{s}</span>)}</div>}
             </div>)}
-            {sel.enrichment?.status!=="done"&&sel.website&&<button onClick={()=>enrichLead(sel)} disabled={enrId===sel.id} style={{marginTop:8,background:"#1e293b",border:"1px solid #334155",borderRadius:6,padding:"5px 12px",fontSize:11,color:"#94a3b8",cursor:"pointer"}}>{enrId===sel.id?"Buscando...":"🔍 Extraer emails y redes"}</button>}
+            {sel.enrichment?.status!=="done"&&<button onClick={()=>enrichLead(sel)} disabled={enrId===sel.id} style={{marginTop:8,background:"#1e293b",border:"1px solid #334155",borderRadius:6,padding:"5px 12px",fontSize:11,color:"#94a3b8",cursor:"pointer"}}>{enrId===sel.id?"🔍 Investigando...":"🔍 Enriquecer"}</button>}
           </div>
 
           <div style={{display:"flex",gap:3,marginBottom:8}}>
