@@ -195,16 +195,26 @@ export default function App() {
     setLeads(all);setLoading(false);setLoadMsg("");showToast(`${all.length} alojamientos en ${wp.length} paradas`);
   }
 
+  const SCRAPLING_API = "https://scrapling-vercel.vercel.app";
   async function enrichLead(lead){
     if(!lead.website){showToast("Sin web");return;}setEnrId(lead.id);
     try{
-      const html=await proxyFetch(lead.website);
-      let{emails,socials,phones}=extractContacts(html||"");
-      try{const base=new URL(lead.website);for(const p of["/contact","/contacto","/about"]){try{const ch=await proxyFetch(base.origin+p,6000);if(ch){const ex=extractContacts(ch);emails=[...new Set([...emails,...ex.emails])];Object.assign(socials,ex.socials);phones=[...new Set([...phones,...ex.phones])];}}catch{}}}catch{}
+      let emails=[],socials={},phones=[];
+      try{
+        const r=await fetch(`${SCRAPLING_API}/enrich`,{
+          method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({url:lead.website}),signal:AbortSignal.timeout(20000)
+        });
+        if(r.ok){const d=await r.json();emails=d.emails||[];socials=d.socials||{};phones=d.phones||[];}
+      }catch{
+        const html=await proxyFetch(lead.website);
+        const ex=extractContacts(html||"");emails=ex.emails;socials=ex.socials;phones=ex.phones;
+        try{const base=new URL(lead.website);for(const p of["/contact","/contacto","/about"]){try{const ch=await proxyFetch(base.origin+p,6000);if(ch){const e2=extractContacts(ch);emails=[...new Set([...emails,...e2.emails])];Object.assign(socials,e2.socials);phones=[...new Set([...phones,...e2.phones])];}}catch{}}}catch{}
+      }
       const en={emails:emails.slice(0,8),socials,phones:phones.slice(0,3),status:"done"};
       setLeads(p=>p.map(l=>l.id===lead.id?{...l,enrichment:en,phone:phones[0]||l.phone}:l));
       if(sel?.id===lead.id)setSel(p=>({...p,enrichment:en,phone:phones[0]||p.phone}));
-      showToast(`${emails.length} emails + ${Object.keys(socials).length} redes`);
+      showToast(`${emails.length} emails · ${Object.keys(socials).length} redes · ${phones.length} tel`);
     }catch(e){setLeads(p=>p.map(l=>l.id===lead.id?{...l,enrichment:{...l.enrichment,status:"error"}}:l));}
     setEnrId(null);
   }
@@ -413,3 +423,4 @@ export default function App() {
     </div>
   );
 }
+
